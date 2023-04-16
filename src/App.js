@@ -4,6 +4,7 @@ import axios from 'axios';
 import './App.css';
 
 function App() {
+  const apiKey = process.env.REACT_APP_OPEN_API_KEY;
   const [record, setRecord] = useState(false);
   const [recordings, setRecordings] = useState([]);
 
@@ -20,10 +21,12 @@ function App() {
   };
 
   const onStop = (recordedBlob) => {
-    setRecordings([...recordings, { ...recordedBlob, transcription: '' }]);
+    const newIndex = recordings.length;
+    setRecordings([...recordings, { ...recordedBlob, transcription: '', translation: '' }]);
+    transcribeAndTranslateAudio(recordedBlob.blob, newIndex);
   };
 
-  const transcribeAudio = async (audioBlob, index) => {
+  const transcribeAndTranslateAudio = async (audioBlob, index) => {
     const audioFile = new File([audioBlob], 'audio.wav', {
       type: 'audio/wav',
     });
@@ -33,26 +36,44 @@ function App() {
     formData.append('model', 'whisper-1');
 
     try {
-      const response = await axios.post(
+      // Transcription
+      const transcriptionResponse = await axios.post(
         'https://api.openai.com/v1/audio/transcriptions',
         formData,
         {
           headers: {
-            'Authorization': `Bearer <YOUR API KEY>`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'multipart/form-data',
           },
         }
       );
+      
+      // Translation
+      const translationResponse = await axios.post(
+        'https://api.openai.com/v1/audio/translations',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
       setRecordings((prevRecordings) => {
         return prevRecordings.map((recording, idx) => {
           if (idx === index) {
-            return { ...recording, transcription: response.data.text };
+            return {
+              ...recording,
+              transcription: transcriptionResponse.data.text,
+              translation: translationResponse.data.text,
+            };
           }
           return recording;
         });
       });
     } catch (error) {
-      console.error('Error transcribing audio:', error.response ? error.response.data : error);
+      console.error('Error processing audio:', error.response ? error.response.data : error);
     }
   };
 
@@ -79,15 +100,13 @@ function App() {
             <div key={index} className="recording">
               <p>Recording {index + 1}</p>
               <audio src={recording.blobURL} controls />
-              <button
-                onClick={() => transcribeAudio(recording.blob, index)}
-                className="transcribe-button"
-              >
-                Transcribe
-              </button>
               <div className="transcription">
                 <h3>Transcription:</h3>
                 <p>{recording.transcription}</p>
+              </div>
+              <div className="translation">
+                <h3>Translation:</h3>
+                <p>{recording.translation}</p>
               </div>
             </div>
           ))}
