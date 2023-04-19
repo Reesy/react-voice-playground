@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ReactMic } from 'react-mic';
 import axios from 'axios';
 import './App.css';
@@ -8,6 +8,23 @@ function App() {
   const [record, setRecord] = useState(false);
   const [recordings, setRecordings] = useState([]);
 
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.code === 'Space') {
+        if (!record) {
+          startRecording();
+        } else {
+          stopRecording();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [record]);
   const startRecording = () => {
     setRecord(true);
   };
@@ -36,7 +53,6 @@ function App() {
     formData.append('model', 'whisper-1');
 
     try {
-      // Transcription
       const transcriptionResponse = await axios.post(
         'https://api.openai.com/v1/audio/transcriptions',
         formData,
@@ -47,26 +63,34 @@ function App() {
           },
         }
       );
-      
-      // Translation
-      const translationResponse = await axios.post(
-        'https://api.openai.com/v1/audio/translations',
-        formData,
+
+      const englishTranslation = transcriptionResponse.data.text;
+
+      const translatedText = `Translate the following into Japanese: ${englishTranslation}`;
+      const chatCompletionResponse = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: translatedText }],
+        },
         {
           headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'multipart/form-data',
           },
         }
       );
+
+      const japaneseTranslation = chatCompletionResponse.data.choices[0].message.content;
 
       setRecordings((prevRecordings) => {
         return prevRecordings.map((recording, idx) => {
           if (idx === index) {
             return {
               ...recording,
-              transcription: transcriptionResponse.data.text,
-              translation: translationResponse.data.text,
+              transcription: englishTranslation,
+              englishTranslation,
+              japaneseTranslation,
             };
           }
           return recording;
@@ -104,9 +128,13 @@ function App() {
                 <h3>Transcription:</h3>
                 <p>{recording.transcription}</p>
               </div>
-              <div className="translation">
-                <h3>Translation:</h3>
-                <p>{recording.translation}</p>
+              <div className="english-translation">
+                <h3>English Translation:</h3>
+                <p>{recording.englishTranslation}</p>
+              </div>
+              <div className="japanese-translation">
+                <h3>Japanese Translation:</h3>
+                <p>{recording.japaneseTranslation}</p>
               </div>
             </div>
           ))}
